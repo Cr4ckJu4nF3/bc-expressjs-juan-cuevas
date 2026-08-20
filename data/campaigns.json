@@ -1,0 +1,14 @@
+[
+  { "id": "c001", "name": "Verano Rebajas 2026", "client": "Moda Urbana", "channel": "Instagram", "budget": 2500.00, "active": true, "metrics": { "impressions": 154000, "clicks": 6200, "conversions": 310 } },
+  { "id": "c002", "name": "Lanzamiento App Fit", "client": "FitLife Gym", "channel": "Google Ads", "budget": 4200.50, "active": true, "metrics": { "impressions": 89000, "clicks": 4100, "conversions": 205 } },
+  { "id": "c003", "name": "Newsletter Semanal", "client": "TechNova", "channel": "Email", "budget": 350.00, "active": true, "metrics": { "impressions": 12000, "clicks": 1800, "conversions": 95 } },
+  { "id": "c004", "name": "Reels Producto Estrella", "client": "Bella Cosmetics", "channel": "Instagram", "budget": 1800.00, "active": false, "metrics": { "impressions": 210000, "clicks": 9800, "conversions": 480 } },
+  { "id": "c005", "name": "Campaña B2B Leads", "client": "TechNova", "channel": "LinkedIn", "budget": 5600.00, "active": true, "metrics": { "impressions": 45000, "clicks": 2100, "conversions": 130 } },
+  { "id": "c006", "name": "Black Friday Push", "client": "Moda Urbana", "channel": "Facebook", "budget": 3100.75, "active": false, "metrics": { "impressions": 178000, "clicks": 7300, "conversions": 390 } },
+  { "id": "c007", "name": "Tutoriales de Producto", "client": "FitLife Gym", "channel": "TikTok", "budget": 1500.00, "active": true, "metrics": { "impressions": 320000, "clicks": 15200, "conversions": 610 } },
+  { "id": "c008", "name": "Búsqueda Marca", "client": "Bella Cosmetics", "channel": "Google Ads", "budget": 2900.00, "active": true, "metrics": { "impressions": 67000, "clicks": 3400, "conversions": 175 } },
+  { "id": "c009", "name": "Onboarding Clientes", "client": "TechNova", "channel": "Email", "budget": 420.00, "active": true, "metrics": { "impressions": 9800, "clicks": 1450, "conversions": 88 } },
+  { "id": "c010", "name": "Challenge Viral", "client": "Bella Cosmetics", "channel": "TikTok", "budget": 2200.00, "active": true, "metrics": { "impressions": 410000, "clicks": 19800, "conversions": 720 } },
+  { "id": "c011", "name": "Retargeting Carrito", "client": "Moda Urbana", "channel": "Facebook", "budget": 980.00, "active": false, "metrics": { "impressions": 52000, "clicks": 2600, "conversions": 140 } },
+  { "id": "c012", "name": "Networking Corporativo", "client": "FitLife Gym", "channel": "LinkedIn", "budget": 1750.00, "active": true, "metrics": { "impressions": 21000, "clicks": 950, "conversions": 42 } }
+]
