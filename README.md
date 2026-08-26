@@ -1,140 +1,154 @@
-# 🚀 Proyecto Semana 04: Validación, Errores y Logging
+# 🚀 API REST — Campañas de Marketing Digital (Validación, Errores y Logging)
 
 ## 🎯 Objetivo
 
-Integrar **validación de datos con Zod**, **manejo estructurado de errores con AppError** y
-**logging profesional con Winston + Morgan** en la API del dominio que te fue asignado.
+Extender la API en capas de la Semana 03 agregando **validación de entradas con Zod**, **manejo estructurado de errores con `AppError`** y **logging profesional con Winston + Morgan**, usando **Express 5** y **TypeScript**.
 
-## 📋 Tu Dominio Asignado
-
-> **Dominio**: _El instructor te asignará tu dominio (Biblioteca, Farmacia, Gimnasio, etc.)_
-
-Adapta el código genérico del `starter/` a tu dominio. Todos los nombres genéricos
-(`Item`, `items`) deben reemplazarse con los términos correspondientes a tu dominio.
-
-**Ejemplos de adaptación:**
-
-| Dominio | Recurso principal | Campos de ejemplo |
-|---|---|---|
-| Biblioteca | Book | title, author, isbn, stock |
-| Farmacia | Medicine | name, dosage, price, stock |
-| Gimnasio | Member | name, email, plan, joinedAt |
-| Restaurante | Dish | name, category, price, available |
+Este proyecto resuelve, de forma explícita, el problema que quedó pendiente en la Semana 03: la validación de negocio ahora responde con el código HTTP correcto (400) en vez de un 500 genérico.
 
 ---
 
-## ✅ Requisitos Funcionales
+## 📋 Dominio del proyecto
 
-### 1. Validación con Zod
-- Schema de creación (`createItemSchema`) con validaciones apropiadas al dominio
-- Schema de actualización (`updateItemSchema`) reutilizando `.partial()`
-- Tipos TypeScript inferidos con `z.infer<>`
-- Validación activa en controladores con `.safeParse()` — respuesta 400 con `issues[]`
-- Validación del parámetro `:id` con `z.coerce.number().int().positive()`
+**Recurso principal**: `Campaign` — igual que en semanas anteriores, con `client`, `channel`, `budget`, `active` y `metrics`.
 
-### 2. Manejo de errores estructurado
-- Clase `AppError` con `statusCode` e `isOperational`
-- Servicio lanza `AppError(404, ...)` cuando el recurso no existe
-- Middleware `notFound` registrado antes del `errorHandler`
-- Middleware `errorHandler` con **exactamente 4 parámetros**
-- `errorHandler` distingue `ZodError → 400`, `AppError → statusCode`, genérico → 500
-- `next(err)` en todos los bloques `try/catch` de los controladores
-
-### 3. Logging profesional
-- Logger Winston configurado en `src/config/logger.ts`
-  - Nivel `http` en desarrollo, `warn` en producción
-  - Formato colorizado en desarrollo, JSON en producción
-  - Transport de archivo `logs/error.log` solo en producción
-- Morgan integrado como middleware con la stream de Winston
-- Al menos un `logger.info()` al iniciar el servidor
-- Al menos un `logger.warn()` en el `errorHandler` para errores AppError
-- `console.log` reemplazados por `logger.*`
-
-### 4. Arquitectura en capas
-- Rutas → Controladores → Servicios → Repositorios
-- Toda la lógica de negocio en el servicio, no en el controlador
-- Paginación en el endpoint de listado (`page` y `limit` como query params)
-
----
-
-## 🛠️ Estructura del starter
-
-```
-starter/src/
-├── config/
-│   └── logger.ts          ← TODO: Winston logger + morganMiddleware
-├── errors/
-│   └── AppError.ts        ← TODO: clase AppError
-├── middlewares/
-│   ├── errorHandler.ts    ← TODO: 4-param error handler
-│   └── notFound.ts        ← TODO: 404 middleware
-├── schemas/
-│   └── item.schema.ts     ← TODO: createItemSchema + updateItemSchema
-├── repositories/
-│   └── items.repository.ts ← TODO: CRUD en memoria
-├── services/
-│   └── items.service.ts   ← TODO: lógica de negocio con AppError
-├── controllers/
-│   └── items.controller.ts ← TODO: thin controller con next(err)
-├── routes/
-│   └── items.routes.ts    ← TODO: registrar endpoints
-├── types.ts               ← TODO: Item entity + tipos de respuesta
-├── app.ts                 ← TODO: setup Express + orden correcto
-└── server.ts              ← TODO: bootstrap + logger.info
+```typescript
+interface Campaign {
+  id: number;
+  name: string;
+  client: string;
+  channel: string;
+  budget: number;
+  active: boolean;
+  metrics: {
+    impressions: number;
+    clicks: number;
+    conversions: number;
+  };
+  createdAt: Date;
+}
 ```
 
 ---
 
-## 💡 Ejemplos de adaptación por dominio
+## ✅ Qué se implementó
 
-### Biblioteca — campo adicional opcional
+### 1. Validación con Zod (`src/schemas/campaign.schema.ts`)
 
-```ts
-// src/schemas/item.schema.ts (adaptado a Book)
-export const createItemSchema = z.object({
-  title: z.string().min(1).trim(),
-  author: z.string().min(1).trim(),
-  isbn: z.string().regex(/^\d{13}$/, 'ISBN debe tener 13 dígitos'),
-  stock: z.number().int().nonnegative().default(0),
-});
+`createCampaignSchema` valida los 5 campos de negocio (`name`, `client`, `channel` no vacíos; `budget` positivo; `metrics` con enteros no negativos), con `active` y `metrics` por defecto si no se envían. `updateCampaignSchema` reutiliza los mismos campos como opcionales para actualizaciones parciales. Los DTOs (`CreateCampaignDto`, `UpdateCampaignDto`) se infieren con `z.infer<>` — el schema es la única fuente de verdad.
+
+**Detalle de diseño importante**: el schema base (`campaignShape`) está separado del que aplica `.default()`, porque en Zod `.partial()` **no anula** `.default()` — si no fuera por esta separación, un `PUT` parcial que no envía `active` lo pisaría con el valor por defecto en vez de conservar el existente.
+
+### 2. Errores estructurados (`src/errors/AppError.ts`, `src/middlewares/`)
+
+- `AppError`: clase con `statusCode` e `isOperational`, para errores esperados del dominio (`throw new AppError(404, ...)`)
+- `notFound`: middleware de 3 parámetros que captura cualquier ruta no definida
+- `errorHandler`: middleware de 4 parámetros (obligatorio para que Express lo reconozca como error handler) que distingue `ZodError → 400`, `AppError → su propio statusCode`, y errores genéricos → `500` (sin stack trace en producción)
+
+### 3. Logging con Winston + Morgan (`src/config/logger.ts`)
+
+- Nivel `http` en desarrollo, `warn` en producción (menos ruido)
+- Formato coloreado y legible en consola durante desarrollo; JSON estructurado en producción
+- Transport de archivo (`logs/error.log`) que **solo se activa en producción**, y solo para nivel `error`
+- Morgan conectado al logger vía un `stream` personalizado, así cada request HTTP pasa por Winston en vez de loguearse por separado
+
+| Método | Ruta | Descripción | Status |
+|--------|------|-------------|--------|
+| `GET` | `/api/v1/campaigns?page=&limit=` | Lista paginada | `200` |
+| `GET` | `/api/v1/campaigns/:id` | Obtiene una campaña | `200` / `400` / `404` |
+| `POST` | `/api/v1/campaigns` | Crea validando con Zod | `201` / `400` |
+| `PUT` | `/api/v1/campaigns/:id` | Actualiza (parcial) | `200` / `400` / `404` |
+| `DELETE` | `/api/v1/campaigns/:id` | Elimina | `204` / `400` / `404` |
+
+---
+
+## 🧠 Decisiones de diseño
+
+- **`campaignShape` sin `.default()` como base**: evita que `updateCampaignSchema.partial()` inyecte valores por defecto en campos no enviados (bug real de Zod, verificado con pruebas).
+- **`AppError` en vez de `Error` genérico** para los 404 del service: esto es lo que permite que el `errorHandler` global responda con el `statusCode` correcto en vez de un 500 catch-all — la mejora directa sobre la Semana 03.
+- **`logger.warn()` para `AppError`, `logger.error()` con stack para errores no controlados**: separa "esto era esperado" de "esto rompió algo", que es justamente para lo que sirven los niveles de un logger.
+- **File transport solo en producción**: en desarrollo todo va a consola (más rápido de iterar); en producción los errores además quedan persistidos en `logs/error.log` para poder revisarlos después de que ocurrieron.
+
+---
+
+## 🛠️ Cómo correr el proyecto
+
+```bash
+cd 3-proyecto/starter
+npm install
+npm run dev
 ```
 
-### Farmacia — validación de precio y dosificación
+El servidor arranca en `http://localhost:3000`.
 
-```ts
-// src/schemas/item.schema.ts (adaptado a Medicine)
-export const createItemSchema = z.object({
-  name: z.string().min(1).trim(),
-  dosage: z.string().min(1, 'Especifica la dosificación (ej: 500mg)'),
-  price: z.number().positive('El precio debe ser mayor a 0'),
-  stock: z.number().int().nonnegative().default(0),
-});
+```bash
+npm run build   # compila a dist/
+npm start       # corre la versión compilada (respeta NODE_ENV)
 ```
 
 ---
 
-## 📊 Endpoints requeridos
+## 🧪 Pruebas realizadas
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/api/v1/items` | Listar con paginación |
-| `GET` | `/api/v1/items/:id` | Obtener por id |
-| `POST` | `/api/v1/items` | Crear validando con Zod |
-| `PUT` | `/api/v1/items/:id` | Actualizar (campos opcionales) |
-| `DELETE` | `/api/v1/items/:id` | Eliminar |
+```bash
+# Body inválido → 400 con issues descriptivos
+curl -X POST http://localhost:3000/api/v1/campaigns \
+  -H "Content-Type: application/json" -d '{"name":"","budget":-50}'
+# → 400 { "error": "Validation Error", "issues": [{ "field": "name", ... }, { "field": "budget", ... }] }
+
+# :id no numérico → 400
+curl http://localhost:3000/api/v1/campaigns/abc
+# → 400 { "error": "Validation Error", "message": "Parámetro inválido", "issues": [...] }
+
+# Campaña inexistente → 404 vía AppError
+curl http://localhost:3000/api/v1/campaigns/999
+# → 404 { "error": "Application Error", "message": "Campaign 999 not found" }
+
+# Ruta inexistente → 404 JSON (no HTML)
+curl http://localhost:3000/ruta-rara
+# → 404 { "error": "Application Error", "message": "Ruta GET /ruta-rara no encontrada" }
+
+# Crear válida, sin active/metrics → defaults aplicados
+curl -X POST http://localhost:3000/api/v1/campaigns \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Challenge Viral","client":"Bella Cosmetics","channel":"TikTok","budget":2200}'
+# → 201 { "data": { ..., "active": true, "metrics": { "impressions": 0, "clicks": 0, "conversions": 0 } } }
+
+# PUT parcial → NO pisa active/metrics existentes con los defaults
+curl -X PUT http://localhost:3000/api/v1/campaigns/1 -H "Content-Type: application/json" -d '{"budget":3000}'
+# → 200 { "data": { ..., "budget": 3000, "active": true, "metrics": { ...valores originales... } } }
+```
+
+Verificado también en modo producción (`NODE_ENV=production`): los logs de consola pasan a JSON, y un error 500 real (JSON malformado en el body) queda registrado con su stack completo en `logs/error.log`, mientras que la respuesta al cliente oculta esos detalles.
 
 ---
 
-## 🛠️ Entregables
+## 📂 Estructura
 
-1. **API funcional** con todos los endpoints del dominio
-2. **Capturas de Postman/Thunder Client** demostrando:
-   - `POST` con body inválido → 400 con `issues[]`
-   - `GET /:id` con id no numérico → 400
-   - `GET /:id` con id inexistente → 404
-   - `GET /ruta-inexistente` → 404 JSON (no HTML)
-   - Logs en consola visibles
-3. **README.md** dentro de tu entrega describiendo:
-   - Dominio asignado y recurso principal
-   - Campos del schema y sus validaciones
-   - Cómo ejecutar el proyecto (`pnpm dev`)
+```
+starter/
+├── package.json
+├── tsconfig.json
+├── .env.example
+└── src/
+    ├── app.ts                            # Configuración de Express + orden de middlewares
+    ├── server.ts                         # Entry point + logger.info al arrancar
+    ├── types.ts                          # Campaign, contratos de respuesta
+    ├── config/
+    │   └── logger.ts                     # Winston + integración con Morgan
+    ├── errors/
+    │   └── AppError.ts                   # Clase de errores operacionales
+    ├── middlewares/
+    │   ├── notFound.ts                   # 404 para rutas no definidas
+    │   └── errorHandler.ts               # Manejador global (4 params)
+    ├── schemas/
+    │   └── campaign.schema.ts            # Validación Zod + DTOs inferidos
+    ├── repositories/
+    │   └── campaigns.repository.ts       # Acceso a datos (en memoria)
+    ├── services/
+    │   └── campaigns.service.ts          # Lógica de negocio
+    ├── controllers/
+    │   └── campaigns.controller.ts       # Interfaz HTTP
+    └── routes/
+        └── campaigns.routes.ts           # Mapeo de rutas
+```
