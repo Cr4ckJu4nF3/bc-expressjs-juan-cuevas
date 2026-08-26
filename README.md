@@ -1,28 +1,137 @@
-# 🚀 Proyecto Semana 03 — API REST con Arquitectura en Capas
+# 🚀 API REST — Campañas de Marketing Digital (Arquitectura en Capas)
 
 ## 🎯 Objetivo
 
-Construir una API REST completa aplicando la arquitectura en 4 capas (`routes → controllers → services → repositories`) con contratos de respuesta tipados en TypeScript.
+Refactorizar la API de la Semana 02 aplicando una **arquitectura en 4 capas** (`routes → controllers → services → repositories`), con contratos de respuesta consistentes y paginación real, usando **Express 5** y **TypeScript**.
+
+Este proyecto es la continuación directa de la Semana 02: mismo dominio y mismo recurso (`Campaign`), pero ahora la lógica está separada por responsabilidad en vez de vivir toda junta en el archivo de rutas.
 
 ---
 
-## 📋 Tu Dominio Asignado
+## 📋 Dominio del proyecto
 
-**Dominio**: _El instructor te asignará tu dominio único._
+**Recurso principal**: `Campaign` — una campaña publicitaria de un cliente de la agencia, corriendo en un canal específico.
 
-Ejemplos de dominios posibles:
-- 📖 Biblioteca → recursos: `books`
-- 💊 Farmacia → recursos: `medicines`
-- 🏋️ Gimnasio → recursos: `members`
-- 🍽️ Restaurante → recursos: `dishes`
-- 🏥 Hospital → recursos: `patients`
-- 🎥 Cine → recursos: `movies`
+```typescript
+interface Campaign {
+  id: number;
+  name: string;
+  client: string;
+  channel: string;
+  budget: number;
+  active: boolean;
+  metrics: {
+    impressions: number;
+    clicks: number;
+    conversions: number;
+  };
+  createdAt: string;
+}
+```
 
-Adapta **todos los nombres, campos y lógica** al dominio que recibas. El starter usa `items` como nombre genérico.
+Los datos siguen viviendo en memoria, pero ahora el acceso está aislado en una sola capa (`repository`), para que el día que se reemplace por una base de datos real (Semana 05), nada más que ese archivo cambie.
 
 ---
 
-## 📁 Estructura del starter
+## ✅ Qué se implementó
+
+### 1. Repository (`src/repositories/campaigns.repository.ts`)
+
+Único punto de acceso al store en memoria. Devuelve siempre copias defensivas (`{ ...campaign }`) para que nadie fuera de esta capa pueda mutar el array interno por accidente.
+
+### 2. Service (`src/services/campaigns.service.ts`)
+
+Contiene la lógica de negocio: cálculo de paginación (`page`, `limit`), y una regla de dominio (`budget` no puede ser negativo). **Cero imports de Express** — es 100% testeable de forma aislada.
+
+### 3. Controller (`src/controllers/campaigns.controller.ts`)
+
+Hace solo tres cosas por endpoint: extrae datos de `req`, llama al service, responde con `res`. No contiene lógica de negocio ni toca el store.
+
+### 4. Routes (`src/routes/campaigns.routes.ts`)
+
+Mapea las 5 URLs del recurso a sus controllers correspondientes. Sin lógica.
+
+### 5. Contratos de respuesta (`src/types.ts`)
+
+`SingleResponse<T>`, `PaginatedResponse<T>` y `ErrorResponse` genéricos, reutilizados en todos los endpoints para que la forma de la respuesta sea siempre predecible.
+
+| Método | Ruta | Descripción | Status |
+|--------|------|-------------|--------|
+| `GET` | `/api/v1/campaigns?page=&limit=` | Lista paginada | `200` |
+| `GET` | `/api/v1/campaigns/:id` | Obtiene una campaña | `200` / `404` |
+| `POST` | `/api/v1/campaigns` | Crea una campaña | `201` |
+| `PUT` | `/api/v1/campaigns/:id` | Actualiza una campaña | `200` / `404` |
+| `DELETE` | `/api/v1/campaigns/:id` | Elimina una campaña | `204` / `404` |
+
+---
+
+## 🧠 Decisiones de diseño
+
+- **Separación estricta por capa**: `repository` no sabe de HTTP, `service` no sabe de Express, `controller` no sabe de negocio. Cada capa se puede reemplazar o testear sola.
+- **Copias defensivas en el repository**: `findAll()`, `create()` y `update()` devuelven `{ ...campaign }` en vez de la referencia interna, para evitar mutaciones accidentales desde capas superiores.
+- **Validación de negocio con `Error` genérico (a propósito, por ahora)**: el service lanza `Error('budget must be a non-negative number')` si el presupuesto es negativo. Como no es un `AppError` con `statusCode`, el error handler global lo captura como **500** en vez de un **400** más apropiado. Esto queda intencionalmente así — es exactamente el problema que la Semana 04 resuelve con una clase de error personalizada.
+- **Paginación en el service, no en el repository**: el repository siempre devuelve todo el array; el `slice` de paginación ocurre en el service, que es donde vive la lógica de negocio.
+
+---
+
+## 🛠️ Cómo correr el proyecto
+
+```bash
+cd 3-proyecto/starter
+npm install
+npm run dev
+```
+
+El servidor arranca en `http://localhost:3000`.
+
+```bash
+npm run build   # compila a dist/
+npm start       # corre la versión compilada
+```
+
+---
+
+## 🧪 Pruebas realizadas
+
+```bash
+# Listar con paginación
+curl "http://localhost:3000/api/v1/campaigns?page=1&limit=2"
+# → { "data": [...2 campañas...], "total": 3, "page": 1, "limit": 2 }
+
+# Obtener por ID
+curl http://localhost:3000/api/v1/campaigns/1
+# → { "data": { "id": 1, "name": "Verano Rebajas 2026", ... } }
+
+# ID inexistente
+curl http://localhost:3000/api/v1/campaigns/999
+# → 404 { "error": "Not Found", "message": "Campaign 999 not found" }
+
+# Crear campaña válida
+curl -X POST http://localhost:3000/api/v1/campaigns \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Challenge Viral","client":"Bella Cosmetics","channel":"TikTok","budget":2200,"active":true,"metrics":{"impressions":0,"clicks":0,"conversions":0}}'
+# → 201 + la campaña creada con id autogenerado
+
+# Budget negativo — 500 (ver nota de diseño arriba)
+curl -X POST http://localhost:3000/api/v1/campaigns \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Mal presupuesto","client":"X","channel":"Email","budget":-100,"active":true,"metrics":{"impressions":0,"clicks":0,"conversions":0}}'
+# → 500 { "error": "Internal Server Error", "message": "budget must be a non-negative number" }
+
+# Actualizar
+curl -X PUT http://localhost:3000/api/v1/campaigns/1 -H "Content-Type: application/json" -d '{"budget":3000}'
+# → 200 + campaña con budget actualizado
+
+# Eliminar
+curl -X DELETE http://localhost:3000/api/v1/campaigns/2
+# → 204 sin body
+```
+
+Todos los casos fueron verificados manualmente contra el servidor real antes de dar por completado el ejercicio.
+
+---
+
+## 📂 Estructura
 
 ```
 starter/
@@ -30,115 +139,15 @@ starter/
 ├── tsconfig.json
 ├── .env.example
 └── src/
-    ├── app.ts
-    ├── server.ts
-    ├── types.ts              # Tipos a completar para tu dominio
-    ├── routes/
-    │   └── items.routes.ts   # TODO: registrar endpoints
-    ├── controllers/
-    │   └── items.controller.ts # TODO: thin CRUD controller
+    ├── app.ts                            # Configuración de Express + middlewares
+    ├── server.ts                         # Entry point
+    ├── types.ts                          # Campaign, DTOs, contratos de respuesta
+    ├── repositories/
+    │   └── campaigns.repository.ts       # Acceso a datos (en memoria)
     ├── services/
-    │   └── items.service.ts    # TODO: lógica con paginación
-    └── repositories/
-        └── items.repository.ts # TODO: async CRUD + copias defensivas
+    │   └── campaigns.service.ts          # Lógica de negocio + paginación
+    ├── controllers/
+    │   └── campaigns.controller.ts       # Interfaz HTTP
+    └── routes/
+        └── campaigns.routes.ts           # Mapeo de rutas
 ```
-
----
-
-## ✅ Requisitos Funcionales
-
-Implementa los siguientes endpoints (adaptados a tu dominio):
-
-| Método | Ruta                 | Status exitoso | Descripción                         |
-|--------|----------------------|----------------|-------------------------------------|
-| GET    | `/api/v1/items`      | 200            | Listar con paginación `?page&limit` |
-| GET    | `/api/v1/items/:id`  | 200            | Obtener por ID                      |
-| POST   | `/api/v1/items`      | 201            | Crear nuevo recurso                 |
-| PUT    | `/api/v1/items/:id`  | 200            | Actualizar recurso existente        |
-| DELETE | `/api/v1/items/:id`  | 204            | Eliminar recurso                    |
-
-### Contratos de respuesta obligatorios
-
-```json
-// GET /items?page=1&limit=5 → 200
-{ "data": [...], "total": 20, "page": 1, "limit": 5 }
-
-// GET /items/1 → 200
-{ "data": { "id": 1, ... } }
-
-// POST /items → 201
-{ "data": { "id": 6, ... } }
-
-// GET /items/999 → 404
-{ "error": "Not Found", "message": "Item 999 not found" }
-```
-
----
-
-## 💡 Ejemplos de Adaptación por Dominio
-
-**Biblioteca — books:**
-```ts
-interface Book {
-  id: number;
-  title: string;
-  author: string;
-  isbn: string;
-  available: boolean;
-  createdAt: string;
-}
-```
-
-**Farmacia — medicines:**
-```ts
-interface Medicine {
-  id: number;
-  name: string;
-  dosage: string;
-  stock: number;
-  expiresAt: string;
-  createdAt: string;
-}
-```
-
-**Gimnasio — members:**
-```ts
-interface Member {
-  id: number;
-  fullName: string;
-  plan: 'basic' | 'premium';
-  active: boolean;
-  joinedAt: string;
-  createdAt: string;
-}
-```
-
----
-
-## 🏗️ Reglas de Arquitectura
-
-1. **Repository**: única capa que toca el store. Todos los métodos `async Promise<T>`.
-2. **Service**: sin imports de Express. Contiene la paginación y validaciones de dominio.
-3. **Controller**: exactamente 3 pasos — extraer → llamar service → responder.
-4. **Routes**: solo mapeo URL → controller function.
-
----
-
-## 🛠️ Instrucciones
-
-1. Clona/copia el `starter/`
-2. Instala dependencias: `pnpm install`
-3. Copia `.env.example` a `.env`
-4. Renombra `items` por el recurso de tu dominio en todos los archivos
-5. Define los campos de tu `Item` en `types.ts`
-6. Implementa en orden: repository → service → controller → routes
-7. Verifica con `pnpm dev` y prueba con Thunder Client o curl
-
----
-
-## 📌 Entregables
-
-1. Código fuente con tu dominio aplicado (sin `items` genérico)
-2. Screenshot de Thunder Client con los 5 endpoints funcionando
-3. Screenshot de `pnpm build` sin errores TypeScript
-4. README actualizado describiendo tu API (dominio, campos, ejemplos)
