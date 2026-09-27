@@ -1,0 +1,37 @@
+// Prisma Schema — Proyecto Semana 05
+// Dominio: Agencia de Marketing Digital
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Recurso secundario — cada cliente de la agencia puede tener varias campañas
+model Client {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String     @unique
+  campaigns Campaign[]
+  createdAt DateTime   @default(now())
+}
+
+// Recurso principal
+model Campaign {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  channel    String
+  budget     Float
+  active     Boolean  @default(true)
+  code       String   @unique // código interno de campaña, único (para demostrar P2002)
+  impressions Int     @default(0)
+  clicks     Int      @default(0)
+  conversions Int     @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId String? @db.Uuid
+}

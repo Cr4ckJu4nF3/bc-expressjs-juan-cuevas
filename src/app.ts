@@ -1,0 +1,23 @@
+// src/app.ts — Configuración de la aplicación Express
+// Dominio: Agencia de Marketing Digital
+
+import express from 'express';
+import { errorHandler } from './middlewares/errorHandler';
+import { notFound } from './middlewares/notFound';
+import campaignsRouter from './routes/items.routes';
+
+const app = express();
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.use('/api/v1/campaigns', campaignsRouter);
+
+app.use(notFound);
+app.use(errorHandler);
+
+export { app };
